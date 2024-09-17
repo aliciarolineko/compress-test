@@ -1,46 +1,46 @@
 import os
-from telethon import TelegramClient, events
+from pyrogram import Client, filters
+from moviepy.editor import VideoFileClip
 from dotenv import load_dotenv
-import ffmpeg
 
 # Cargar variables de entorno
 load_dotenv()
-api_id = os.getenv('API_ID')
-api_hash = os.getenv('API_HASH')
-bot_token = os.getenv('BOT_TOKEN')
 
-# Crear cliente de Telegram
-client = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
+API_ID = os.getenv("API_ID")
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-@client.on(events.NewMessage)
-async def handler(event):
-    if event.message.media:
-        try:
-            # Enviar mensaje de progreso: Descargando el archivo
-            await event.reply('Descargando el archivo...')
-            
-            # Descargar el archivo
-            file_path = await client.download_media(event.message.media)
-            new_file_path = file_path.rsplit('.', 1)[0] + '.mkv'
+app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-            # Enviar mensaje de progreso: Convirtiendo el archivo
-            await event.reply('Convirtiendo el archivo...')
-            
-            # Convertir el archivo a MKV con la altura de 480 píxeles y la anchura proporcional
-            ffmpeg.input(file_path).output(new_file_path, vf='scale=-1:480', r=20, ar=48000).run()
+@app.on_message(filters.video | filters.document)
+async def video_handler(client, message):
+    temp_dir = "server/tempcompress"
+    try:
+        # Crear carpeta temporal
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Descargar el archivo
+        file_path = await message.download(file_name=temp_dir)
+        
+        # Convertir el video
+        output_path = os.path.join(temp_dir, "output.mkv")
+        clip = VideoFileClip(file_path)
+        clip_resized = clip.resize(height=480)
+        clip_resized.write_videofile(output_path, fps=20, codec="libx264")
+        
+    except Exception as e:
+        await message.reply_text("Error")
+    else:
+        # Enviar el video convertido si no hubo errores
+        await message.reply_video(video=output_path)
+    finally:
+        # Borrar archivos y carpeta temporal
+        if os.path.exists(temp_dir):
+            for file in os.listdir(temp_dir):
+                file_path = os.path.join(temp_dir, file)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            os.rmdir(temp_dir)
+            os.makedirs(temp_dir, exist_ok=True)
 
-            # Enviar mensaje de progreso: Enviando el archivo
-            await event.reply('Enviando el archivo...')
-            
-            # Enviar el nuevo archivo al chat
-            await client.send_file(event.chat_id, new_file_path)
-
-            # Borrar los archivos
-            os.remove(file_path)
-            os.remove(new_file_path)
-        except Exception as e:
-            await event.reply('Falló')
-            print(f'Error: {e}')
-
-# Iniciar el cliente
-client.run_until_disconnected()
+app.run()
