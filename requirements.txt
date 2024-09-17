@@ -1,3 +1,6 @@
 telethon
 python-dotenv
 ffmpeg-python
+pyrogram==2.0.106
+moviepy==1.0.3
+python-dotenv==1.0.0
